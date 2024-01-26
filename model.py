@@ -55,28 +55,18 @@ class Model:
                 break
         return stride
 
-    def build(self, ae_e=None, ae_d=None, aae_d=None):
+    def build(self, ae_d=None):
         assert self.generate_shape[0] % 32 == 0 and self.generate_shape[1] % 32 == 0
-        if ae_e is None:
-            ae_e_input, ae_e_output = self.build_ae_e(bn=True)
-            self.ae_e = tf.keras.models.Model(ae_e_input, ae_e_output)
-        else:
-            ae_e_input, ae_e_output = ae_e.input, ae_e.output
-            self.ae_e = ae_e
-
+        ae_e_input, ae_e_output = self.build_ae_e(bn=True)
+        self.ae_e = tf.keras.models.Model(ae_e_input, ae_e_output)
         if ae_d is None:
             ae_d_input, ae_d_output = self.build_ae_d(bn=True)
             self.ae_d = tf.keras.models.Model(ae_d_input, ae_d_output)
         else:
             ae_d_input, ae_d_output = ae_d.input, ae_d.output
             self.ae_d = ae_d
-
-        if aae_d is None:
-            aae_d_input, aae_d_output = self.build_aae_d(bn=False)
-            self.aae_d = tf.keras.models.Model(aae_d_input, aae_d_output)
-        else:
-            aae_d_input, aae_d_output = aae_d.input, aae_d.output
-            self.aae_d = aae_d
+        aae_d_input, aae_d_output = self.build_aae_d(bn=False)
+        self.aae_d = tf.keras.models.Model(aae_d_input, aae_d_output)
 
         ae_output = self.ae_d(ae_e_output)
         self.ae = tf.keras.models.Model(ae_e_input, ae_output)

@@ -53,7 +53,6 @@ class TrainingConfig:
                  iterations,
                  view_grid_size,
                  model_name,
-                 pretrained_gan_g_path='',
                  pretrained_ae_d_path='',
                  training_view=False):
         self.train_image_path = train_image_path
@@ -65,7 +64,6 @@ class TrainingConfig:
         self.iterations = iterations
         self.view_grid_size = view_grid_size
         self.model_name = model_name
-        self.pretrained_gan_g_path = pretrained_gan_g_path
         self.pretrained_ae_d_path = pretrained_ae_d_path
         self.training_view = training_view
 
@@ -85,7 +83,6 @@ class AdversarialAutoencoder(CheckpointManager):
         self.iterations = config.iterations
         self.view_grid_size = config.view_grid_size
         self.model_name = config.model_name
-        self.pretrained_gan_g_path = config.pretrained_gan_g_path
         self.pretrained_ae_d_path = config.pretrained_ae_d_path
         self.training_view = config.training_view
 
@@ -93,7 +90,7 @@ class AdversarialAutoencoder(CheckpointManager):
         self.live_view_previous_time = time()
         warnings.filterwarnings(action='ignore')
 
-        if self.pretrained_gan_g_path == '' and self.pretrained_ae_d_path == '':
+        if self.pretrained_ae_d_path == '':
             self.model = Model(generate_shape=self.generate_shape, latent_dim=self.latent_dim)
             self.ae, self.ae_e, self.ae_d, self.aae, self.aae_d = self.model.build()
         else:
@@ -103,8 +100,9 @@ class AdversarialAutoencoder(CheckpointManager):
                     pretrained_ae_d = tf.keras.models.load_model(self.pretrained_ae_d_path, compile=False)
                     self.ae_d = pretrained_ae_d
                     self.generate_shape = self.ae_d.output_shape[1:]
+                    self.latent_dim = pretrained_ae_d.input.shape[-1]
                 else:
-                    print(f'ae_d file not found : {self.pretrained_ae_d_path}')
+                    print(f'decoder file not found : {self.pretrained_ae_d_path}')
                     exit(0)
 
             self.model = Model(generate_shape=self.generate_shape, latent_dim=self.latent_dim)
