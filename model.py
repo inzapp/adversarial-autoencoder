@@ -40,15 +40,18 @@ class Model:
         self.ae_d = None
         self.aae = None
         self.aae_d = None
-        self.extra_strides = [64, 128, 256, 512]
+        self.strides = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512]
+        self.filters = [16, 32, 64, 128, 256, 512, 512, 512, 512, 512]
         self.stride = self.calc_stride(self.generate_shape)
+        self.stride_index = self.strides.index(self.stride)
         self.latent_rows = generate_shape[0] // self.stride
         self.latent_cols = generate_shape[1] // self.stride
+        self.latent_channels = self.filters[self.stride_index-1]
 
     def calc_stride(self, generate_shape):
         stride = 32
         min_size = min(generate_shape[:2])
-        for v in self.extra_strides:
+        for v in self.strides:
             if min_size >= v and min_size % v == 0:
                 stride = v
             else:
@@ -77,16 +80,8 @@ class Model:
     def build_ae_e(self, bn):
         ae_e_input = tf.keras.layers.Input(shape=self.generate_shape)
         x = ae_e_input
-        x = self.conv2d(x, 32, 5, 2, activation='leaky', bn=bn)
-        x = self.conv2d(x, 64, 5, 2, activation='leaky', bn=bn)
-        x = self.conv2d(x, 128, 5, 2, activation='leaky', bn=bn)
-        x = self.conv2d(x, 256, 5, 2, activation='leaky', bn=bn)
-        x = self.conv2d(x, 256, 5, 2, activation='leaky', bn=bn)
-        for extra_stride in self.extra_strides:
-            if self.stride >= extra_stride:
-                x = self.conv2d(x, 256, 5, 2, activation='leaky', bn=bn)
-            else:
-                break
+        for i in range(self.stride_index):
+            x = self.conv2d(x, self.filters[i], 5, 2, activation='leaky', bn=bn)
         x = self.flatten(x)
         ae_e_output = self.dense(x, self.latent_dim, activation='linear')
         return ae_e_input, ae_e_output
@@ -94,18 +89,10 @@ class Model:
     def build_ae_d(self, bn):
         ae_d_input = tf.keras.layers.Input(shape=(self.latent_dim,))
         x = ae_d_input
-        x = self.dense(x, self.latent_rows * self.latent_cols * 256, activation='leaky', bn=bn)
-        x = self.reshape(x, (self.latent_rows, self.latent_cols, 256))
-        for extra_stride in self.extra_strides:
-            if self.stride >= extra_stride:
-                x = self.conv2d_transpose(x, 256, 4, 2, activation='leaky', bn=bn)
-            else:
-                break
-        x = self.conv2d_transpose(x, 256, 4, 2, activation='leaky', bn=bn)
-        x = self.conv2d_transpose(x, 256, 4, 2, activation='leaky', bn=bn)
-        x = self.conv2d_transpose(x, 128, 4, 2, activation='leaky', bn=bn)
-        x = self.conv2d_transpose(x, 64, 4, 2, activation='leaky', bn=bn)
-        x = self.conv2d_transpose(x, 32, 4, 2, activation='leaky', bn=bn)
+        x = self.dense(x, self.latent_rows * self.latent_cols * self.latent_channels, activation='leaky', bn=bn)
+        x = self.reshape(x, (self.latent_rows, self.latent_cols, self.latent_channels))
+        for i in range(self.stride_index-1, -1, -1):
+            x = self.conv2d_transpose(x, self.filters[i], 4, 2, activation='leaky', bn=bn)
         ae_d_output = self.conv2d_transpose(x, self.generate_shape[-1], 1, 1, activation='sigmoid')
         return ae_d_input, ae_d_output
 
