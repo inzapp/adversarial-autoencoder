@@ -104,14 +104,13 @@ class Model:
         aae_d_output = self.dense(x, 1, activation='linear')
         return aae_d_input, aae_d_output
 
-    def conv2d(self, x, filters, kernel_size, strides, bn=False, activation='leaky', kernel_constraint=None):
+    def conv2d(self, x, filters, kernel_size, strides, bn=False, activation='leaky'):
         x = tf.keras.layers.Conv2D(
             strides=strides,
             filters=filters,
             padding='same',
             kernel_size=kernel_size,
             use_bias=False if bn else True,
-            kernel_constraint=kernel_constraint,
             kernel_initializer=self.kernel_initializer())(x)
         if bn:
             x = self.batch_normalization(x)
