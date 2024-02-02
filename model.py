@@ -25,10 +25,8 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 import os
-import tensorflow as tf
-
-
 os.environ['TF_FORCE_GPU_ALLOW_GROWTH'] = 'true'
+import tensorflow as tf
 
 
 class Model:
@@ -58,12 +56,12 @@ class Model:
                 break
         return stride
 
-    def build(self, ae_d=None):
+    def build(self, ae_d=None, gap=True):
         assert self.generate_shape[0] % 32 == 0 and self.generate_shape[1] % 32 == 0
-        ae_e_input, ae_e_output = self.build_ae_e(bn=True)
+        ae_e_input, ae_e_output = self.build_ae_e(bn=True, gap=gap)
         self.ae_e = tf.keras.models.Model(ae_e_input, ae_e_output)
         if ae_d is None:
-            ae_d_input, ae_d_output = self.build_ae_d(bn=True)
+            ae_d_input, ae_d_output = self.build_ae_d(bn=True, gap=gap)
             self.ae_d = tf.keras.models.Model(ae_d_input, ae_d_output)
         else:
             ae_d_input, ae_d_output = ae_d.input, ae_d.output
@@ -77,20 +75,29 @@ class Model:
         self.aae = tf.keras.models.Model(ae_e_input, aae_output)
         return self.ae, self.ae_e, self.ae_d, self.aae, self.aae_d
 
-    def build_ae_e(self, bn):
+    def build_ae_e(self, bn, gap=True):
         ae_e_input = tf.keras.layers.Input(shape=self.generate_shape)
         x = ae_e_input
         for i in range(self.stride_index):
             x = self.conv2d(x, self.filters[i], 5, 2, activation='leaky', bn=bn)
-        x = self.flatten(x)
-        ae_e_output = self.dense(x, self.latent_dim, activation='linear')
+        if gap:
+            x = self.conv2d(x, self.latent_dim, 1, 1, activation='linear', bn=True)
+            ae_e_output = tf.keras.layers.GlobalAveragePooling2D()(x)
+        else:
+            x = self.flatten(x)
+            ae_e_output = self.dense(x, self.latent_dim, activation='linear', bn=True)
         return ae_e_input, ae_e_output
 
-    def build_ae_d(self, bn):
+    def build_ae_d(self, bn, gap=True):
         ae_d_input = tf.keras.layers.Input(shape=(self.latent_dim,))
         x = ae_d_input
-        x = self.dense(x, self.latent_rows * self.latent_cols * self.latent_channels, activation='leaky', bn=bn)
-        x = self.reshape(x, (self.latent_rows, self.latent_cols, self.latent_channels))
+        if gap:
+            x = self.dense(x, self.latent_rows * self.latent_cols * self.latent_dim, activation='leaky', bn=bn)
+            x = self.reshape(x, (self.latent_rows, self.latent_cols, self.latent_dim))
+            x = self.conv2d(x, self.latent_channels, 1, 1, activation='leaky', bn=bn)
+        else:
+            x = self.dense(x, self.latent_rows * self.latent_cols * self.latent_channels, activation='leaky', bn=bn)
+            x = self.reshape(x, (self.latent_rows, self.latent_cols, self.latent_channels))
         for i in range(self.stride_index-1, -1, -1):
             x = self.conv2d_transpose(x, self.filters[i], 4, 2, activation='leaky', bn=bn)
         ae_d_output = self.conv2d_transpose(x, self.generate_shape[-1], 1, 1, activation='sigmoid')
@@ -109,8 +116,9 @@ class Model:
             strides=strides,
             filters=filters,
             padding='same',
+            use_bias=not bn,
             kernel_size=kernel_size,
-            use_bias=False if bn else True,
+            kernel_regularizer=self.kernel_regularizer(),
             kernel_initializer=self.kernel_initializer())(x)
         if bn:
             x = self.batch_normalization(x)
@@ -121,8 +129,9 @@ class Model:
             strides=strides,
             filters=filters,
             padding='same',
-            kernel_size=kernel_size,
             use_bias=not bn,
+            kernel_size=kernel_size,
+            kernel_regularizer=self.kernel_regularizer(),
             kernel_initializer=self.kernel_initializer())(x)
         if bn:
             x = self.batch_normalization(x)
@@ -142,6 +151,9 @@ class Model:
 
     def kernel_initializer(self):
         return tf.keras.initializers.RandomNormal(mean=0.0, stddev=0.02)
+
+    def kernel_regularizer(self, l2=0.01):
+        return tf.keras.regularizers.l2(l2=l2)
 
     def activation(self, x, activation):
         if activation == 'leaky':
